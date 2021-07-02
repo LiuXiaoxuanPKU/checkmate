@@ -96,9 +96,15 @@ def compile_tf2(
     @tf.function
     def grads_check(data, label):
         with tf.GradientTape() as check_tape:
+            info_before_fwd = nvidia_smi.nvmlDeviceGetMemoryInfo(handle)
+            print("Before forward Memory Use %d MB" %(info_before_fwd.used / 1024 / 1024))
             predictions = model(data)
             loss_val = loss(label, predictions)
+        info_before_bwd = nvidia_smi.nvmlDeviceGetMemoryInfo(handle)
+        print("Before backward Memory Use %d MB" %(info_before_bwd.used / 1024 / 1024))
         gradients = check_tape.gradient(loss_val, model.trainable_variables)
+        info_after_bwd = nvidia_smi.nvmlDeviceGetMemoryInfo(handle)
+        print("After backward Memory Use %d MB" %(info_after_bwd.used / 1024 / 1024))
         return predictions, loss_val, gradients
 
     fn = grads_check.get_concrete_function(input_spec, label_spec)
@@ -128,14 +134,8 @@ def compile_tf2(
 
     @tf.function
     def train_step_check(data, labels):
-        info_before_fwd = nvidia_smi.nvmlDeviceGetMemoryInfo(handle)
-        print("Before forward Memory Use %d MB" %(info_before_fwd.used / 1024 / 1024))
         predictions, loss_val, gradients = grad_fn_check(data, labels)
-        info_before_bwd = nvidia_smi.nvmlDeviceGetMemoryInfo(handle)
-        print("Before backward Memory Use %d MB" %(info_before_bwd.used / 1024 / 1024))
         optimizer.apply_gradients(zip(gradients, model.trainable_variables))
-        info_after_bwd = nvidia_smi.nvmlDeviceGetMemoryInfo(handle)
-        print("After backward Memory Use %d MB" %(info_after_bwd.used / 1024 / 1024))
         return predictions, loss_val
 
     return train_step_check
