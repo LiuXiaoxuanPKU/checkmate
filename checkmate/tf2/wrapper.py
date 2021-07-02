@@ -1,5 +1,6 @@
 import logging
 import subprocess
+import nvidia_smi
 
 import psutil
 import tensorflow as tf
@@ -63,6 +64,9 @@ def get_function(model, input_shape, label_shape, optimizer, loss):
 def compile_tf2(
     model: tf.keras.Model, loss, optimizer, input_spec=None, label_spec=None, scheduler=solver, budget="auto", **kwargs
 ):
+    nvidia_smi.nvmlInit()
+    handle = nvidia_smi.nvmlDeviceGetHandleByIndex(0)
+
     set_opts()
     """
     Checkmate optimizes your DNN graphs to consume less GPU memory. Call this function using a tf.function
@@ -124,8 +128,14 @@ def compile_tf2(
 
     @tf.function
     def train_step_check(data, labels):
+        info_before_fwd = nvidia_smi.nvmlDeviceGetMemoryInfo(handle)
+        print("Before forward Memory Use %d MB" %(info_before_fwd.used / 1024 / 1024))
         predictions, loss_val, gradients = grad_fn_check(data, labels)
+        info_before_bwd = nvidia_smi.nvmlDeviceGetMemoryInfo(handle)
+        print("Before backward Memory Use %d MB" %(info_before_bwd.used / 1024 / 1024))
         optimizer.apply_gradients(zip(gradients, model.trainable_variables))
+        info_after_bwd = nvidia_smi.nvmlDeviceGetMemoryInfo(handle)
+        print("After backward Memory Use %d MB" %(info_after_bwd.used / 1024 / 1024))
         return predictions, loss_val
 
     return train_step_check
