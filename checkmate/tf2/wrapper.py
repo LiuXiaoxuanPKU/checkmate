@@ -100,23 +100,27 @@ def compile_tf2(
     fn = grads_check.get_concrete_function(input_spec, label_spec)
     g = dfgraph_from_tf_function(fn)
 
-    # choose solver and calculate solver
-    sched_result = scheduler(g, budget, **kwargs)
-    if not sched_result.feasible:
-        logging.error(
-            "[checkmate] Checkmate solver could find no feasible schedule for the specificed budget of {}".format(budget)
-        )
-        raise ValueError("No feasible solution for specified budget of {}".format(budget))
-    logging.debug("[checkmate] Schedule solved")
-
     # create recomputed gradient function
     def clean_bs(tensorspec):
         newshape = list(tensorspec.shape)
         newshape[0] = None
         return tf.TensorSpec(shape=newshape, dtype=tensorspec.dtype)
 
-    fn_nobatchsize = grads_check.get_concrete_function(clean_bs(input_spec), clean_bs(label_spec))
-    grad_fn_check = edit_graph(fn_nobatchsize, g.op_dict, sched_result.schedule)
+    # choose solver and calculate solver
+    if scheduler is not None:
+        sched_result = scheduler(g, budget, **kwargs)
+        if not sched_result.feasible:
+            logging.error(
+                "[checkmate] Checkmate solver could find no feasible schedule for the specificed budget of {}".format(budget)
+            )
+            raise ValueError("No feasible solution for specified budget of {}".format(budget))
+        logging.debug("[checkmate] Schedule solved")
+
+        fn_nobatchsize = grads_check.get_concrete_function(clean_bs(input_spec), clean_bs(label_spec))
+        grad_fn_check = edit_graph(fn_nobatchsize, g.op_dict, sched_result.schedule)
+    else:
+        fn_nobatchsize = grads_check.get_concrete_function(clean_bs(input_spec), clean_bs(label_spec))
+        grad_fn_check = fn_nobatchsize
 
     @tf.function
     def train_step_check(data, labels):
