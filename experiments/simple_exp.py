@@ -72,13 +72,13 @@ g, idx_to_name = dfgraph_from_keras(model, batch_size=batch_size, cost_model=cos
 #     if isinstance(s, OperatorEvaluation):
 #         print(s)
 GB = 1000000000
-for budget in range(int(2.3 * GB), int(3 * GB), int(0.05 * GB)):
+for budget in range(int(3 * GB), int(3.5 * GB), int(0.05 * GB)):
     result_ilp = solve_ilp_gurobi(g, budget)
     if result_ilp.schedule is None:
         continue
-    tensor_plot(g, result_ilp.schedule, log_base)
+    # tensor_plot(g, result_ilp.schedule, log_base)
     print(result_ilp.schedule_aux_data.peak_ram)
-    plot(result_ilp, True, "./graphs/RSU")
+    # plot(result_ilp, True, "./graphs/RSU")
     ckpt_layers = get_ckpt_layers(result_ilp.schedule)
     print(ckpt_layers)
     print(idx_to_name)

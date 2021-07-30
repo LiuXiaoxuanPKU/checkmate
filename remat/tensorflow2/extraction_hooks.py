@@ -113,10 +113,13 @@ def pool_hook(node, inputs, outputs):
     mem_cost = np.prod(outputs) * MEMORY_MULTIPLIER
     ops_per_output = 0  # TODO fix
     print(node)
-    if isinstance(node, tf.python.keras.layers.pooling.GlobalAveragePooling2D):
-        ops_per_output = 1
-    else:
+    # if isinstance(node, tf.python.keras.layers.pooling.GlobalAveragePooling2D):
+    #     ops_per_output = 1
+    # else:
+    if hasattr(node, 'strides'):
         ops_per_output = np.product(node.strides)
+    else:
+        ops_per_output = 1
     ops = ops_per_output * np.prod(outputs)
     return ops, mem_cost
 
