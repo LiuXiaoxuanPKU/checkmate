@@ -1,8 +1,18 @@
 import numpy as np
+import tensorflow as tf
 
 MEMORY_MULTIPLIER = 4  # 4 bytes per variable
 LAST_DIMS = None
 
+MEM_BANDWIDTH = 4.8 * pow(10, 9)
+FLOP_CAPABILITY = 32 * 1.8 * pow(10, 9)
+CONV_FWD_FACTOR = 2096
+POOL_FWD_FACTOR = 4437 / 5.0 * 3
+FC_FWD_FACTOR = 120000
+RELU_FACTOR = 149224.5529 / 9 * 8
+
+def getCost(read, write, flops):
+    return (max(read / MEM_BANDWIDTH, flops / FLOP_CAPABILITY)) + write / MEM_BANDWIDTH
 
 def get_attr(node, name, typ="ints"):
     out = []
@@ -22,6 +32,24 @@ def conv_transpose_hook(node, inputs, outputs):
     ops = ops_per_output * np.prod(outputs)
     return ops, mem_cost
 
+def conv_hook_lily(node, inputs, outputs):
+    global CONV_FWD_FACTOR
+    kernel = node.weights[0].shape
+    IC = kernel[2]
+    write_num = np.prod(outputs)
+    read_num = write_num * int(kernel[0]) * int(kernel[1]) * IC
+    flops = read_num
+
+    mem_cost = np.prod(outputs) * MEMORY_MULTIPLIER
+    if outputs[1] == 224 and  inputs[3] == 3:
+        print("Change conv factors")
+        CONV_FWD_FACTOR = 6231 * 4
+    ops = CONV_FWD_FACTOR * getCost(read_num, write_num, flops)
+
+    # conv and relu are fused, also count the relu cost here
+    ops += RELU_FACTOR * getCost(write_num, write_num, write_num)
+    print("Cost for conv input ", inputs, " ", ops)
+    return ops, mem_cost
 
 def conv_hook(node, inputs, outputs):
     # NOTE: This method assumes shapes are ordered as NHWC
@@ -71,12 +99,24 @@ def relu_hook(node, inputs, outputs):
     mem_cost = np.prod(outputs) * MEMORY_MULTIPLIER
     return ops, mem_cost
 
+def pool_hook_lily(node, inputs, outputs):
+    IC = inputs[-1]
+    write_num =np.prod(outputs)
+    read_num = write_num * np.prod(node.pool_size) * IC
+    flops = read_num
+    ops = POOL_FWD_FACTOR * getCost(read_num, write_num, flops)
+    mem_cost = np.prod(outputs) * MEMORY_MULTIPLIER
+    print("Cost for pool input ", inputs, " ", ops)
+    return ops, mem_cost
 
 def pool_hook(node, inputs, outputs):
     mem_cost = np.prod(outputs) * MEMORY_MULTIPLIER
-
-    # ops_per_output = np.prod(kernel)
     ops_per_output = 0  # TODO fix
+    print(node)
+    if isinstance(node, tf.python.keras.layers.pooling.GlobalAveragePooling2D):
+        ops_per_output = 1
+    else:
+        ops_per_output = np.product(node.strides)
     ops = ops_per_output * np.prod(outputs)
     return ops, mem_cost
 
@@ -93,6 +133,13 @@ def pad_hook(node, inputs, outputs):
     ops = 0
     return ops, mem_cost
 
+def fc_hook_lily(node, inputs, outputs):
+    read_num = np.prod(inputs)
+    write_num = np.prod(outputs)
+    flops = write_num * inputs[1]
+    ops = FC_FWD_FACTOR * getCost(read_num, write_num, flops)
+    mem_cost = np.prod(outputs) * MEMORY_MULTIPLIER
+    return ops, mem_cost
 
 def fc_hook(node, inputs, outputs):
     batch_size = inputs[0]
@@ -122,7 +169,7 @@ def reshape_hook(node, inputs, outputs):
             "Could not infer missing dimension in reshape output"
 
     mem_cost = np.prod(outputs) * MEMORY_MULTIPLIER
-    ops = 0
+    ops = 1000000000
     return ops, mem_cost
 
 
@@ -170,6 +217,7 @@ def pspnet_lambda_hook(node, inputs, outputs):
 hooks = {
     # General hooks
     'Conv2D': conv_hook,
+    # 'Conv2D': conv_hook_lily,
     'Conv2DTranspose': conv_transpose_hook,
     'Cropping2D': pool_hook,  # TODO fix
     'DepthwiseConv2D': depthwise_conv_hook,
@@ -177,6 +225,7 @@ hooks = {
     'Activation': relu_hook,
     'ReLU': relu_hook,
     'MaxPooling2D': pool_hook,
+    # 'MaxPooling2D': pool_hook_lily,
     'Dropout': dropout_hook,
     'Concatenate': concat_hook,
     'Add': add_hook,
@@ -188,6 +237,7 @@ hooks = {
     'Reshape': reshape_hook,
     'UpSampling2D': upsample_hook,
     'Dense': fc_hook,
+    # 'Dense': fc_hook_lily,
     # 'Gemm': gemm_hook,
     # 'Squeeze' : reshape_hook,
     'ZeroPadding2D': pad_hook,

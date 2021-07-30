@@ -17,7 +17,7 @@ import seaborn as sns
 from remat.core.utils.definitions import PathLike
 
 # BATCH_SIZES_LOAD = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048]
-BATCH_SIZES_LOAD = [32, 64, 128, 256, 512, 1024, 2048]
+BATCH_SIZES_LOAD = [32, 64, 96, 128, 256, 512, 1024, 2048]
 
 
 class CostModel:
@@ -35,11 +35,11 @@ class CostModel:
         for batch_size in BATCH_SIZES_LOAD:
             cost_file = self.load_profile_s3(model_name, batch_size, platform)
             if cost_file is not None:
+                self.logger.warning(f"load %s successfully" % (cost_file))
                 self.batch_sizes_to_load.append(batch_size)
                 self.cost_files_to_load.append(cost_file)
             else:
                 self.logger.warning(f"Missing cost file {cost_file} for batch size {batch_size}")
-
         # Cost model parameters
         self.fits = []
         self.slopes_np: Optional[np.ndarray] = None

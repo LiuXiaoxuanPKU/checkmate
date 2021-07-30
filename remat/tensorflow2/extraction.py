@@ -95,12 +95,12 @@ def dfgraph_from_keras(mod: tf.keras.models.Model, input_dep=False, output_dep=T
 
     return dfgraph.DFGraph(args=args, v=vfwd + [loss_node_idx] + vback, vfwd_map=vfwd_map,
                            vloss=loss_node_idx, cost_cpu=costs, cost_ram=mems, node_names=names,
-                           cost_ram_parameters=total_mem_params)
+                           cost_ram_parameters=total_mem_params), idx_to_name
 
 
 # noinspection PyProtectedMember
 def count_params_keras(mod: tf.keras.models.Model):
-    mod._check_trainable_weights_consistency()
+    # mod._check_trainable_weights_consistency()
     if hasattr(mod, '_collected_trainable_weights'):
         trainable_count = count_params(mod._collected_trainable_weights)
     elif hasattr(mod, '_unique_trainable_weights'):
